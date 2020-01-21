@@ -1,0 +1,198 @@
+syntax = "proto3";
+
+package SchedularService;
+
+import   "google/protobuf/timestamp.proto";
+import   "google/api/annotations.proto";
+//import   "protoc-gen-gotag/tagger/tagger.proto";
+
+service SchedularService{
+
+    //Schedular CRUD
+    rpc CreateSchedule(Schedule) returns (Schedule){
+        option (google.api.http) = {
+                post:"/schedule/createSchedule"
+                body: "*"
+        };
+    }
+
+    rpc GetSchedule(GetScheduleRequest) returns (stream Schedule){
+        option (google.api.http) = {
+                post:"/schedule/getSchedule"
+                body: "*"
+        };
+    }
+
+    rpc UpdateSchedule(Schedule) returns (Schedule){
+        option (google.api.http) = {
+                post:"/schedule/updateSchedule"
+                body: "*"
+        };
+    }
+
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse){
+        option (google.api.http) = {
+                post:"/schedule/deleteSchedule"
+                body: "*"
+        };
+    }
+
+    //Refresh manupilation
+    rpc RefreshSchedule(RefreshScheduleRequest) returns (RefreshScheduleResponse){
+        option (google.api.http) = {
+                post:"/schedule/refreshSchedule"
+                body: "*"
+        };
+    }
+}
+
+message Schedule{
+    string brand = 1;
+    string vendor = 2;
+    int32 startTime = 3;
+    int32 endTime = 4;
+    repeated SchedulePage pages = 6;
+    google.protobuf.Timestamp createdAt = 7;
+    google.protobuf.Timestamp updatedAt = 8;
+    string baseUrl = 9;
+}
+
+message SchedulePage{
+    string pageName = 1;
+    int32 pageIndex = 2;
+    string pageLogo = 3;
+    repeated ScheduleRow row = 4;
+    repeated ScheduleCarousel carousel = 5;
+    google.protobuf.Timestamp createdAt = 7;
+    google.protobuf.Timestamp updatedAt = 8;
+}
+
+message ScheduleCarousel{
+    string target = 1;
+    string packageName = 2;
+    string imageUrl = 3;
+    string title = 4;
+}
+
+// -1 for sort descending and 1 for sort ascending,
+message ScheduleRow{
+    RowLayout rowlayout = 1;
+    string rowName = 2;
+    int32 rowIndex = 3;
+    map<string, RowFilterValue> rowFilters = 4;
+    map<string, sint32> rowSort = 5;
+    repeated string rowTileIds = 6;
+    RowType rowType = 7;
+    bool shuffle = 8;
+}
+
+enum RowType{
+    Editorial = 0;
+    Recommendation  = 1 ;
+    Dynamic  = 2;
+}
+
+enum RowLayout{
+    Landscape = 0;
+    Portrait = 1;
+    Square = 2;
+    Circle = 3;
+}
+
+message RowFilterValue {
+    repeated string values = 1;
+}
+
+
+
+message GetScheduleRequest{
+    string vendor = 1;
+    string brand = 2;
+}
+
+message DeleteScheduleRequest {
+    string vendor = 1;
+    string brand = 2;
+    int32 startTime = 3;
+    int32 endTime = 4;
+}
+
+message DeleteScheduleResponse {
+    bool isSuccessful = 1;
+}
+
+
+//Refresh logic
+message RefreshScheduleRequest {
+    string vendor = 1;
+    string brand = 2;
+}
+
+
+message RefreshScheduleResponse {
+   bool isSuccessful = 1;
+}
+
+
+
+// Row
+message Row{
+    string rowName = 1;
+    RowLayout rowLayout = 2;
+    string contentBaseUrl = 3;
+    string contentId = 4;
+    bool shuffle = 5;
+}
+
+
+// contentTile
+enum TileType {
+    ImageTile = 0;
+    VideoTile = 1;
+    FeatureTile = 2;
+    AdvertiseTile = 3;
+    CarouselTile = 4;
+}
+
+message ContentTile{
+    string title = 1;
+    string mediaUrl = 2;
+    TileType tileType = 3;
+    string poster = 4;
+    string portrait = 5;
+    bool isDetailPage = 6;
+    string packageName = 7;
+    string contentId = 8;
+    repeated string target = 9;
+    string realeaseDate = 10;
+}
+
+//carosuel
+message CarouselResponse{
+    repeated Carousel carousel = 1;
+    string carouselBaseUrl = 2;
+}
+
+
+message Carousel{
+    string imageUrl = 1;
+    string target = 2;
+    string title = 3;
+    string packageName = 4;
+}
+
+
+//Page
+message CloudwalkerSchedule{
+    repeated PrimePage primePages = 1;
+}
+
+message PrimePage{
+    string pageName = 1;
+    string pageEndpoint = 2;
+}
+
+message Page{
+    string carouselEndpoint = 1;
+    repeated string rowContentEndpoint = 2;
+}
