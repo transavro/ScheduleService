@@ -88,8 +88,10 @@ message ScheduleRow{
 
 enum RowType{
     Editorial = 0;
-    Recommendation  = 1 ;
+    Recommendation_CB  = 1 ;
+    Recommendation_CF  = 3 ;
     Dynamic  = 2;
+    Web = 4;
 }
 
 enum RowLayout{

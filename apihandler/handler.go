@@ -161,6 +161,9 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 													formatString(schedule.Brand),
 													formatString(pageValue.PageName))
 
+
+		log.Println("PageKey =================>   ",pageKey)
+
 		ifExitDelete(pageKey, s.RedisConnection)
 
 
@@ -170,6 +173,9 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 			carouselKey := fmt.Sprintf("%s:%s:%s:carousel", formatString(schedule.Vendor),
 				formatString(schedule.Brand),
 				formatString(pageValue.PageName))
+
+			log.Println("carouselKey =================>   ",carouselKey)
+
 			ifExitDelete(carouselKey, s.RedisConnection)
 			// getting carousel
 			for _, carouselValues := range pageValue.Carousel {
@@ -209,6 +215,9 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 				formatString(pageValue.PageName),
 				formatString(rowValues.RowName),
 				formatString(rowValues.RowType.String()))
+
+			log.Println("rowKey =================>   ",rowKey)
+
 
 			rowPathSet = append(rowPathSet, fmt.Sprintf("/row/%s/%s/%s/%s/%s", 	formatString(schedule.GetVendor()),
 				formatString(schedule.GetBrand()),

@@ -230,8 +230,10 @@
       "type": "string",
       "enum": [
         "Editorial",
-        "Recommendation",
-        "Dynamic"
+        "Recommendation_CB",
+        "Recommendation_CF",
+        "Dynamic",
+        "Web"
       ],
       "default": "Editorial"
     },
