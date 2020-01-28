@@ -1,11 +1,11 @@
 package apihandler
 
 import (
-	pb "github.com/transavro/ScheduleService/proto"
 	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	pb "github.com/transavro/ScheduleService/proto"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/net/context"
@@ -20,6 +20,7 @@ type Server struct {
 	RedisConnection     *redis.Client
 	TileCollection      *mongo.Collection
 }
+
 
 func (s *Server) CreateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Schedule, error) {
 
@@ -210,6 +211,7 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 		// looping rows
 		for _, rowValues := range pageValue.GetRow() {
 
+			// making keys
 			rowKey := fmt.Sprintf("%s:%s:%s:%s:%s", formatString(schedule.Vendor),
 				formatString(schedule.Brand),
 				formatString(pageValue.PageName),
@@ -217,7 +219,6 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 				formatString(rowValues.RowType.String()))
 
 			log.Println("rowKey =================>   ",rowKey)
-
 
 			rowPathSet = append(rowPathSet, fmt.Sprintf("/row/%s/%s/%s/%s/%s", 	formatString(schedule.GetVendor()),
 				formatString(schedule.GetBrand()),
@@ -227,93 +228,142 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 
 
 			ifExitDelete(rowKey, s.RedisConnection)
-			// making stages
-			pipeline := pipelineMaker(rowValues)
 
-			// creating aggregation query
-			tileCur, err := s.TileCollection.Aggregate(context.Background(), pipeline)
-			if err != nil {
-				log.Println(err)
-			}
-
-			defer tileCur.Close(ctx)
-
+			// making content key
 			contentkey := fmt.Sprintf("%s:content", rowKey)
+
+			log.Println("contentkey =================>   ",contentkey)
+
 			ifExitDelete(contentkey, s.RedisConnection)
 
-			for tileCur.Next(ctx) {
-				var contentTile pb.ContentTile
-				if rowValues.RowType == pb.RowType_Editorial {
-					var temp EditorialTemp
-					err = tileCur.Decode(&temp)
-					if err != nil {
-						return  err
-					}
-					contentTile.ContentId = temp.ContentID
-					contentTile.IsDetailPage = temp.IsDetailPage
-					contentTile.PackageName = temp.PackageName
-					if len(temp.Poster) > 0 {
-						contentTile.Poster = temp.Poster[0]
-					}
-					if len(temp.Portrait) > 0 {
-						contentTile.Portrait = temp.Portrait[0]
-					}
-					contentTile.Target = temp.Target
-					contentTile.Title = temp.Title
-					contentTile.TileType = pb.TileType_ImageTile
 
-					if contentTile.XXX_Size() > 0 {
-						contentByte, err := proto.Marshal(&contentTile)
-						if err != nil {
-							return  err
+			if rowValues.RowType == pb.RowType_Web {
+
+
+			log.Println("WEB ==================>   ")
+				// fetching data from web
+				if len(rowValues.GetRowTileIds()) > 0 {
+
+					var playListResult []*pb.ContentTile
+					nextPageToken := ""
+					contentList , nextPageToken , err := getPlayListData (rowValues.GetRowTileIds()[0], nextPageToken )
+					if err != nil {
+						if status.Code(err) == codes.NotFound {
+							log.Println(codes.NotFound, fmt.Sprintf("PlayList Not found. %s ",err.Error()))
+							continue
+						}else {
+							return status.Errorf(codes.Internal, fmt.Sprintf("Not able fetch data from web content "), err)
 						}
-						for i, v := range rowValues.RowTileIds {
-							if v == contentTile.ContentId {
-								if err = s.RedisConnection.ZAdd(contentkey, &redis.Z{
-									Score:  float64(i),
-									Member: contentByte,
-								}).Err() ; err != nil {
-									return err
-								}
-								break
+					}
+					playListResult = append(playListResult, contentList...)
+					//if nextPageToken == "" {
+					//	break;
+					//}
+					rowValues.Rowlayout = pb.RowLayout_Landscape
+					log.Println("From Playlist ===============> ", len(playListResult))
+					if len(playListResult) > 0 {
+						for _, contentTile := range playListResult {
+							contentByte, err := proto.Marshal(contentTile)
+							if err != nil {
+								return  err
+							}
+
+							if err = s.RedisConnection.SAdd(contentkey,contentByte).Err(); err != nil {
+								return err
 							}
 						}
+					}else {
+						return status.Errorf(codes.NotFound, fmt.Sprintf("Not able fetch data from web content "))
 					}
+				}
 
-				} else  {
-					var temp Temp
-					err = tileCur.Decode(&temp)
-					if err != nil {
-						return  err
-					}
-					if len(temp.ContentTile) > 0 {
-						contentTile.ContentId = temp.ContentTile[0].ContentID
-						contentTile.IsDetailPage = temp.ContentTile[0].IsDetailPage
-						contentTile.PackageName = temp.ContentTile[0].PackageName
-						if len(temp.ContentTile[0].Poster) > 0 {
-							contentTile.Poster = temp.ContentTile[0].Poster[0]
-						}
-						if len(temp.ContentTile[0].Portrait) > 0 {
-							contentTile.Portrait = temp.ContentTile[0].Portrait[0]
-						}
-						contentTile.Target = temp.ContentTile[0].Target
-						contentTile.Title = temp.ContentTile[0].Title
-						contentTile.TileType = pb.TileType_ImageTile
-					}
+			}else if rowValues.RowType == pb.RowType_Dynamic ||  rowValues.RowType == pb.RowType_Editorial ||  rowValues.RowType == pb.RowType_Recommendation_CB  {
 
-					if contentTile.XXX_Size() > 0 {
-						contentByte, err := proto.Marshal(&contentTile)
+				// making stages
+				pipeline := pipelineMaker(rowValues)
+				// creating aggregation query
+				tileCur, err := s.TileCollection.Aggregate(context.Background(), pipeline)
+				if err != nil {
+					log.Println(err)
+				}
+
+				defer tileCur.Close(ctx)
+
+				for tileCur.Next(ctx) {
+					var contentTile pb.ContentTile
+					if rowValues.RowType == pb.RowType_Editorial {
+						var temp EditorialTemp
+						err = tileCur.Decode(&temp)
 						if err != nil {
 							return  err
 						}
+						contentTile.ContentId = temp.ContentID
+						contentTile.IsDetailPage = temp.IsDetailPage
+						contentTile.PackageName = temp.PackageName
+						if len(temp.Poster) > 0 {
+							contentTile.Poster = temp.Poster[0]
+						}
+						if len(temp.Portrait) > 0 {
+							contentTile.Portrait = temp.Portrait[0]
+						}
+						contentTile.Target = temp.Target
+						contentTile.Title = temp.Title
+						contentTile.TileType = pb.TileType_ImageTile
 
-						if err = s.RedisConnection.SAdd(contentkey,contentByte).Err(); err != nil {
-							return err
+						if contentTile.XXX_Size() > 0 {
+							contentByte, err := proto.Marshal(&contentTile)
+							if err != nil {
+								return  err
+							}
+							for i, v := range rowValues.RowTileIds {
+								if v == contentTile.ContentId {
+									if err = s.RedisConnection.ZAdd(contentkey, &redis.Z{
+										Score:  float64(i),
+										Member: contentByte,
+									}).Err() ; err != nil {
+										return err
+									}
+									break
+								}
+							}
+						}
+
+					} else  {
+						var temp Temp
+						err = tileCur.Decode(&temp)
+						if err != nil {
+							return  err
+						}
+						if len(temp.ContentTile) > 0 {
+							contentTile.ContentId = temp.ContentTile[0].ContentID
+							contentTile.IsDetailPage = temp.ContentTile[0].IsDetailPage
+							contentTile.PackageName = temp.ContentTile[0].PackageName
+							if len(temp.ContentTile[0].Poster) > 0 {
+								contentTile.Poster = temp.ContentTile[0].Poster[0]
+							}
+							if len(temp.ContentTile[0].Portrait) > 0 {
+								contentTile.Portrait = temp.ContentTile[0].Portrait[0]
+							}
+							contentTile.Target = temp.ContentTile[0].Target
+							contentTile.Title = temp.ContentTile[0].Title
+							contentTile.TileType = pb.TileType_ImageTile
+						}
+
+						if contentTile.XXX_Size() > 0 {
+							contentByte, err := proto.Marshal(&contentTile)
+							if err != nil {
+								return  err
+							}
+
+							if err = s.RedisConnection.SAdd(contentkey,contentByte).Err(); err != nil {
+								return err
+							}
 						}
 					}
 				}
 			}
 
+			// sotring it in redis
 			helperRow := pb.Row{
 				RowName:     rowValues.RowName,
 				RowLayout:   rowValues.Rowlayout,
