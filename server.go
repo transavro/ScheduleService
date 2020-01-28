@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"gopkg.in/robfig/cron.v3"
 	"log"
 	"net"
 	"net/http"
@@ -30,8 +31,8 @@ const (
 	developmentMongoHost = "mongodb://192.168.1.9:27017"
 	schedularMongoHost   = "mongodb://192.168.1.143:27017"
 	schedularRedisHost   = ":6379"
-	grpc_port        = ":7775"
-	rest_port		 = ":7776"
+	grpc_port        = ":5777"
+	rest_port		 = ":6777"
 )
 
 // private type for Context keys
@@ -119,12 +120,42 @@ func startGRPCServer(address string) error {
 	grpcServer := grpc.NewServer(serverOptions...)
 
 	// attach the Ping service to the server
-	pb.RegisterSchedularServiceServer(grpcServer, &s) // start the server
+	pb.RegisterSchedularServiceServer(grpcServer, &s)
+
+	c := cron.New()
+
+	c.AddFunc("00 12-3,3-6,6-9,9-12,12-15,15-18,18-21,21-24 * * *", func() {
+		fmt.Println("cron job hit.")
+		runCronJob(&s)
+	})
+
+	defer c.Stop()
+
 	//log.Printf("starting HTTP/2 gRPC server on %s", address)
 	if err := grpcServer.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve: %s", err)
 	}
 	return nil
+}
+
+
+func runCronJob(handler *apihandler.Server){
+	cur, err := scheduleCollection.Find(context.Background(), bson.D{{}})
+	if err != nil {
+		log.Println("Schedular refresh cron error :   ", err)
+	}
+
+	for cur.Next(context.Background()){
+		var schedule *pb.Schedule
+		err = cur.Decode(&schedule)
+		if err != nil {
+			log.Println("Schedular refresh cron decoding error :   ",err)
+		}
+		err = handler.RefreshingWorker(schedule, context.Background())
+		if err != nil {
+			log.Println("Schedular refresh cron refreshWorker error :   ",err)
+		}
+	}
 }
 
 func startRESTServer(address, grpcAddress string) error {
