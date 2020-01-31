@@ -231,8 +231,8 @@
       "enum": [
         "Editorial",
         "Recommendation_CB",
-        "Recommendation_CF",
         "Dynamic",
+        "Recommendation_CF",
         "Web"
       ],
       "default": "Editorial"

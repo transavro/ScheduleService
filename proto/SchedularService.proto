@@ -197,3 +197,40 @@ message Page{
     string carouselEndpoint = 1;
     repeated string rowContentEndpoint = 2;
 }
+
+
+// new schema
+message Content {
+    string title = 1;
+    repeated string poster = 2;
+    repeated string portrait = 3;
+    TileType type = 4;
+    bool isDetailPage = 5;
+    string contentId = 6;
+    repeated Play play = 7;
+    repeated string video = 8;
+}
+
+message Play {
+    string package = 1;
+    string target = 2;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

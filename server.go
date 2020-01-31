@@ -31,8 +31,8 @@ const (
 	developmentMongoHost = "mongodb://192.168.1.9:27017"
 	schedularMongoHost   = "mongodb://192.168.1.143:27017"
 	schedularRedisHost   = ":6379"
-	grpc_port        = ":5777"
-	rest_port		 = ":6777"
+	grpc_port        = ":7775"
+	rest_port		 = ":7776"
 )
 
 // private type for Context keys
@@ -49,7 +49,7 @@ var tileRedis *redis.Client
 func init() {
 	fmt.Println("Welcome to init() function")
 	scheduleCollection = getMongoCollection("cloudwalker", "schedule", developmentMongoHost)
-	tileCollection = getMongoCollection("cwtx2devel", "tiles", developmentMongoHost)
+	tileCollection = getMongoCollection("optimus", "contents", developmentMongoHost)
 	tileRedis = getRedisClient(schedularRedisHost)
 }
 
@@ -116,15 +116,16 @@ func startGRPCServer(address string) error {
 
 	serverOptions := []grpc.ServerOption{grpc.UnaryInterceptor(unaryInterceptor), grpc.StreamInterceptor(streamIntercept)}
 
-	// attach the Ping service to the server
+	//attach the Ping service to the server
 	grpcServer := grpc.NewServer(serverOptions...)
+
 
 	// attach the Ping service to the server
 	pb.RegisterSchedularServiceServer(grpcServer, &s)
 
 	c := cron.New()
 
-	c.AddFunc("00 12-3,3-6,6-9,9-12,12-15,15-18,18-21,21-24 * * *", func() {
+	c.AddFunc("00 24-3,3-6,6-9,9-12,12-15,15-18,18-21,21-24 * * *", func() {
 		fmt.Println("cron job hit.")
 		runCronJob(&s)
 	})
@@ -151,7 +152,7 @@ func runCronJob(handler *apihandler.Server){
 		if err != nil {
 			log.Println("Schedular refresh cron decoding error :   ",err)
 		}
-		err = handler.RefreshingWorker(schedule, context.Background())
+		err = handler.RefreshingWorker(schedule)
 		if err != nil {
 			log.Println("Schedular refresh cron refreshWorker error :   ",err)
 		}
@@ -162,8 +163,7 @@ func startRESTServer(address, grpcAddress string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(runtime.DefaultHeaderMatcher))
-
+	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(runtime.DefaultHeaderMatcher), runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName:false, EnumsAsInts:true, EmitDefaults:true}))
 	opts := []grpc.DialOption{grpc.WithInsecure()} // Register ping
 
 	err := pb.RegisterSchedularServiceHandlerFromEndpoint(ctx, mux, grpcAddress, opts)

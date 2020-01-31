@@ -21,7 +21,6 @@ type Server struct {
 	TileCollection      *mongo.Collection
 }
 
-
 func (s *Server) CreateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Schedule, error) {
 
 	//making fulter query
@@ -35,17 +34,18 @@ func (s *Server) CreateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Sche
 
 	log.Println("hit find query")
 	if findResult.Err() != nil {
-		log.Println(findResult.Err())
-		//All ok now insert the schedule
-		ts, _ := ptypes.TimestampProto(time.Now())
-		req.CreatedAt = ts
-		log.Println(req)
-		_, err := s.SchedularCollection.InsertOne(ctx, &req)
-		if err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("Mongo error while inserting schedule %s ", err.Error()))
+		if findResult.Err() == mongo.ErrNoDocuments {
+			ts, _ := ptypes.TimestampProto(time.Now())
+			req.CreatedAt = ts
+			_, err := s.SchedularCollection.InsertOne(ctx, &req)
+			if err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("Mongo error while inserting schedule %s ", err.Error()))
+			}
+			//go s.RefreshingWorker(req, ctx)
+			return req, nil
+		}else {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("Error while find  the data in mongo:  %s", findResult.Err()))
 		}
-		//go s.RefreshingWorker(req, ctx)
-		return req, nil
 	}
 	return nil, status.Error(codes.AlreadyExists, "schedule already exits please call update api instead")
 }
@@ -82,7 +82,6 @@ func (s *Server) UpdateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Sche
 	//gettting current hour
 	hours, _, _ := time.Now().Clock()
 
-
 	//, {"starttime": bson.M{"$lte": hours}}, {"endtime": bson.M{"$gt": hours}}
 
 	//making fulter query where we find the schedule in the time frame for eg : if current timing is 11 o'clock  and we have schedule 9 to 12 then it will be served.
@@ -108,7 +107,7 @@ func (s *Server) UpdateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Sche
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Error while updating Schedule in DB for brand  %s and vendor %s at time hour %d ", req.Brand, req.Vendor, hours))
 	}
 
-	go s.RefreshingWorker(&schedule, ctx)
+	//go s.RefreshingWorker(&schedule)
 
 	return &schedule, nil
 }
@@ -120,7 +119,6 @@ func (s *Server) DeleteSchedule(ctx context.Context, req *pb.DeleteScheduleReque
 
 	// only temp
 	filter := bson.M{"$and": []bson.M{{"brand": req.GetBrand()}, {"vendor": req.GetVendor()}}}
-
 
 	deleteResult := s.SchedularCollection.FindOneAndDelete(ctx, filter)
 
@@ -143,13 +141,13 @@ func (s *Server) RefreshSchedule(ctx context.Context, req *pb.RefreshScheduleReq
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Not able to decode the schedule ", err))
 	}
-	if err = s.RefreshingWorker(&schedule, ctx); err != nil {
+	if err = s.RefreshingWorker(&schedule); err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("Error in refreshing process ", err))
 	}
-	return &pb.RefreshScheduleResponse{IsSuccessful:true}, nil
+	return &pb.RefreshScheduleResponse{IsSuccessful: true}, nil
 }
 
-func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) error {
+func (s Server) RefreshingWorker(schedule *pb.Schedule) error {
 
 	primeKey := fmt.Sprintf("%s:%s:cloudwalkerPrimePages", formatString(schedule.Vendor), formatString(schedule.Brand))
 	ifExitDelete(primeKey, s.RedisConnection)
@@ -158,15 +156,13 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 	for _, pageValue := range schedule.Pages {
 		var pageObj pb.Page
 
-		pageKey := fmt.Sprintf("%s:%s:%s", 	formatString(schedule.Vendor),
-													formatString(schedule.Brand),
-													formatString(pageValue.PageName))
+		pageKey := fmt.Sprintf("%s:%s:%s", formatString(schedule.Vendor),
+			formatString(schedule.Brand),
+			formatString(pageValue.PageName))
 
-
-		log.Println("PageKey =================>   ",pageKey)
+		log.Println("PageKey =================>   ", pageKey)
 
 		ifExitDelete(pageKey, s.RedisConnection)
-
 
 		// looping carosuel
 		if len(pageValue.Carousel) > 0 {
@@ -175,7 +171,7 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 				formatString(schedule.Brand),
 				formatString(pageValue.PageName))
 
-			log.Println("carouselKey =================>   ",carouselKey)
+			log.Println("carouselKey =================>   ", carouselKey)
 
 			ifExitDelete(carouselKey, s.RedisConnection)
 			// getting carousel
@@ -190,7 +186,7 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 
 				resultByteArray, err := proto.Marshal(&carobj)
 				if err != nil {
-					return  err
+					return err
 				}
 
 				// setting page carousel in redis
@@ -218,162 +214,38 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 				formatString(rowValues.RowName),
 				formatString(rowValues.RowType.String()))
 
-			log.Println("rowKey =================>   ",rowKey)
+			log.Println("rowKey =================>   ", rowKey)
 
-			rowPathSet = append(rowPathSet, fmt.Sprintf("/row/%s/%s/%s/%s/%s", 	formatString(schedule.GetVendor()),
+			rowPathSet = append(rowPathSet, fmt.Sprintf("/row/%s/%s/%s/%s/%s", formatString(schedule.GetVendor()),
 				formatString(schedule.GetBrand()),
 				formatString(pageValue.GetPageName()),
 				formatString(rowValues.GetRowName()),
 				formatString(rowValues.GetRowType().String())))
 
-
 			ifExitDelete(rowKey, s.RedisConnection)
 
 			// making content key
 			contentkey := fmt.Sprintf("%s:content", rowKey)
-
-			log.Println("contentkey =================>   ",contentkey)
-
+			log.Println("contentkey =================>   ", contentkey)
 			ifExitDelete(contentkey, s.RedisConnection)
 
-
-			if rowValues.RowType == pb.RowType_Web {
-
-
-			log.Println("WEB ==================>   ")
-				// fetching data from web
-				if len(rowValues.GetRowTileIds()) > 0 {
-
-					var playListResult []*pb.ContentTile
-					nextPageToken := ""
-					contentList , nextPageToken , err := getPlayListData (rowValues.GetRowTileIds()[0], nextPageToken )
-					if err != nil {
-						if status.Code(err) == codes.NotFound {
-							log.Println(codes.NotFound, fmt.Sprintf("PlayList Not found. %s ",err.Error()))
-							continue
-						}else {
-							return status.Errorf(codes.Internal, fmt.Sprintf("Not able fetch data from web content "), err)
-						}
-					}
-					playListResult = append(playListResult, contentList...)
-					//if nextPageToken == "" {
-					//	break;
-					//}
-					rowValues.Rowlayout = pb.RowLayout_Landscape
-					log.Println("From Playlist ===============> ", len(playListResult))
-					if len(playListResult) > 0 {
-						for _, contentTile := range playListResult {
-							contentByte, err := proto.Marshal(contentTile)
-							if err != nil {
-								return  err
-							}
-
-							if err = s.RedisConnection.SAdd(contentkey,contentByte).Err(); err != nil {
-								return err
-							}
-						}
-					}else {
-						return status.Errorf(codes.NotFound, fmt.Sprintf("Not able fetch data from web content "))
-					}
-				}
-
-			}else if rowValues.RowType == pb.RowType_Dynamic ||  rowValues.RowType == pb.RowType_Editorial ||  rowValues.RowType == pb.RowType_Recommendation_CB  {
-
-				// making stages
-				pipeline := pipelineMaker(rowValues)
-				// creating aggregation query
-				tileCur, err := s.TileCollection.Aggregate(context.Background(), pipeline)
-				if err != nil {
-					log.Println(err)
-				}
-
-				defer tileCur.Close(ctx)
-
-				for tileCur.Next(ctx) {
-					var contentTile pb.ContentTile
-					if rowValues.RowType == pb.RowType_Editorial {
-						var temp EditorialTemp
-						err = tileCur.Decode(&temp)
-						if err != nil {
-							return  err
-						}
-						contentTile.ContentId = temp.ContentID
-						contentTile.IsDetailPage = temp.IsDetailPage
-						contentTile.PackageName = temp.PackageName
-						if len(temp.Poster) > 0 {
-							contentTile.Poster = temp.Poster[0]
-						}
-						if len(temp.Portrait) > 0 {
-							contentTile.Portrait = temp.Portrait[0]
-						}
-						contentTile.Target = temp.Target
-						contentTile.Title = temp.Title
-						contentTile.TileType = pb.TileType_ImageTile
-
-						if contentTile.XXX_Size() > 0 {
-							contentByte, err := proto.Marshal(&contentTile)
-							if err != nil {
-								return  err
-							}
-							for i, v := range rowValues.RowTileIds {
-								if v == contentTile.ContentId {
-									if err = s.RedisConnection.ZAdd(contentkey, &redis.Z{
-										Score:  float64(i),
-										Member: contentByte,
-									}).Err() ; err != nil {
-										return err
-									}
-									break
-								}
-							}
-						}
-
-					} else  {
-						var temp Temp
-						err = tileCur.Decode(&temp)
-						if err != nil {
-							return  err
-						}
-						if len(temp.ContentTile) > 0 {
-							contentTile.ContentId = temp.ContentTile[0].ContentID
-							contentTile.IsDetailPage = temp.ContentTile[0].IsDetailPage
-							contentTile.PackageName = temp.ContentTile[0].PackageName
-							if len(temp.ContentTile[0].Poster) > 0 {
-								contentTile.Poster = temp.ContentTile[0].Poster[0]
-							}
-							if len(temp.ContentTile[0].Portrait) > 0 {
-								contentTile.Portrait = temp.ContentTile[0].Portrait[0]
-							}
-							contentTile.Target = temp.ContentTile[0].Target
-							contentTile.Title = temp.ContentTile[0].Title
-							contentTile.TileType = pb.TileType_ImageTile
-						}
-
-						if contentTile.XXX_Size() > 0 {
-							contentByte, err := proto.Marshal(&contentTile)
-							if err != nil {
-								return  err
-							}
-
-							if err = s.RedisConnection.SAdd(contentkey,contentByte).Err(); err != nil {
-								return err
-							}
-						}
-					}
-				}
+			// calling rowBuilder
+			err := rowBuilder(rowValues, s.TileCollection, s.RedisConnection, contentkey)
+			if err != nil {
+				return err
 			}
 
-			// sotring it in redis
+			// sorting it in redis
 			helperRow := pb.Row{
-				RowName:     rowValues.RowName,
-				RowLayout:   rowValues.Rowlayout,
-				ContentBaseUrl:  "http://cloudwalker-assets-prod.s3.ap-south-1.amazonaws.com/images/tiles/",
-				ContentId: contentkey,
-				Shuffle:   rowValues.Shuffle,
+				RowName:        rowValues.RowName,
+				RowLayout:      rowValues.Rowlayout,
+				ContentBaseUrl: "http://cloudwalker-assets-prod.s3.ap-south-1.amazonaws.com/images/tiles/",
+				ContentId:      contentkey,
+				Shuffle:        rowValues.Shuffle,
 			}
 			resultByteArray, err := proto.Marshal(&helperRow)
 			if err != nil {
-				return  err
+				return err
 			}
 			//TODO add base Url to it
 			s.RedisConnection.SAdd(rowKey, resultByteArray)
@@ -384,20 +256,20 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 
 		resultByteArray, err := proto.Marshal(&pageObj)
 		if err != nil {
-			return  err
+			return err
 		}
 
 		s.RedisConnection.SAdd(pageKey, resultByteArray)
 
 		primePageObj := pb.PrimePage{
 			PageName: pageValue.PageName,
-			PageEndpoint: fmt.Sprintf("/page/%s/%s/%s", 			formatString(schedule.Vendor),
-																		formatString(schedule.Brand),
-																		formatString(pageValue.PageName)),
+			PageEndpoint: fmt.Sprintf("/page/%s/%s/%s", formatString(schedule.Vendor),
+				formatString(schedule.Brand),
+				formatString(pageValue.PageName)),
 		}
 		resultByteArray, err = proto.Marshal(&primePageObj)
 		if err != nil {
-			return  err
+			return err
 		}
 
 		//setting prime pages in redis
@@ -408,4 +280,3 @@ func(s Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) erro
 	}
 	return nil
 }
-
