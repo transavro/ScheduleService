@@ -295,6 +295,7 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 		break
 	default:
 		{
+			log.Println("dynamic")
 			pipeLine := pipelineBuilder(scheduleRow)
 			cur, err := contentCollection.Aggregate(context.Background(), pipeLine)
 			if err != nil {
@@ -302,6 +303,7 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 			}
 
 			for cur.Next(context.Background()) {
+				log.Println(cur.Current.String())
 				var content pb.Content
 				err = cur.Decode(&content)
 				if err != nil {
@@ -381,7 +383,7 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 			{"contentId", "$ref_id"},
 			{"releaseDate", "$metadata.releaseDate"},
 			{"year", "$metadata.year"},
-			{"imdbid", "$metadata.imdbid"},
+			{"imdbId", "$metadata.imdbId"},
 			{"rating", "$metadata.rating"},
 			{"viewCount", "$metadata.viewCount"},
 
@@ -415,9 +417,13 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 
 
 
+		//stage6 unwinding the resultant array
+		stage6 := bson.D{{"$unwind", "$contentTile"}}
+		pipeline = append(pipeline, stage6)
+
 
 		//stage6 moulding according to the deliver schema
-		stage6 := bson.D{{"$project", bson.D{
+		stage7 := bson.D{{"$project", bson.D{
 			{"_id", 0},
 			{"title", "$contentTile.title"},
 			{"poster", "$contentTile.poster"},
@@ -428,7 +434,7 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 			{"play", "$contentTile.play"},
 			{"video", "$contentTile.video"},
 		}}}
-		pipeline = append(pipeline, stage6)
+		pipeline = append(pipeline, stage7)
 	}
 	return pipeline
 }
