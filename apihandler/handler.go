@@ -128,6 +128,21 @@ func (s *Server) DeleteSchedule(ctx context.Context, req *pb.DeleteScheduleReque
 	return &pb.DeleteScheduleResponse{IsSuccessful: true}, nil
 }
 
+
+func(s *Server) GetDropDown(ctx context.Context, req *pb.DropDownReq) (*pb.DropDownResp, error){
+	log.Println(req.GetKey())
+	result, err := s.TileCollection.Distinct(ctx, req.GetKey(), bson.D{})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Error while fetching distinct data from db:  ", err.Error())
+	}
+
+	temp := make([]string, len(result))
+	for i, v := range result {
+		temp[i] = fmt.Sprint(v)
+	}
+	return &pb.DropDownResp{Result:temp}, nil
+}
+
 func (s *Server) RefreshSchedule(ctx context.Context, req *pb.RefreshScheduleRequest) (*pb.RefreshScheduleResponse, error) {
 
 	filter := bson.M{"$and": []bson.M{{"brand": req.GetBrand()}, {"vendor": req.GetVendor()}}}

@@ -43,6 +43,23 @@ service SchedularService{
                 body: "*"
         };
     }
+
+
+    // get dropdownList
+    rpc GetDropDown(DropDownReq) returns (DropDownResp){
+        option (google.api.http) = {
+                post:"/schedule/getDropDown"
+                body: "*"
+        };
+    }
+}
+
+message DropDownReq{
+    string key = 1;
+}
+
+message DropDownResp{
+    repeated string result = 1;
 }
 
 message Schedule{
@@ -201,19 +218,22 @@ message Page{
 
 // new schema
 message Content {
-    string title = 1;
-    repeated string poster = 2;
-    repeated string portrait = 3;
-    TileType type = 4;
-    bool isDetailPage = 5;
-    string contentId = 6;
-    repeated Play play = 7;
-    repeated string video = 8;
+    string title = 8;
+    repeated string poster = 1;
+    repeated string portriat = 2;
+    TileType type = 3;
+    bool isDetailPage = 4;
+    string contentId = 5;
+    repeated Play play = 6;
+    repeated string video = 7;
 }
 
 message Play {
-    string package = 1;
-    string target = 2;
+    int32 monetize = 5;
+    string target = 1;
+    string source = 2;
+    string package = 3;
+    string type = 4;
 }
 
 

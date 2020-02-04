@@ -494,7 +494,7 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							var contentTile pb.Content
 							contentTile.Title = item.Snippet.Title
 							contentTile.Poster = []string{item.Snippet.Thumbnails.Medium.URL}
-							contentTile.Portrait = []string{item.Snippet.Thumbnails.Medium.URL}
+							contentTile.Portriat = []string{item.Snippet.Thumbnails.Medium.URL}
 							contentTile.IsDetailPage = false
 							contentTile.Type = pb.TileType_ImageTile
 
@@ -548,7 +548,7 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							var contentTile pb.Content
 							contentTile.Title = item.Snippet.Title
 							contentTile.Poster = []string{item.Snippet.Thumbnails.Medium.URL}
-							contentTile.Portrait = []string{item.Snippet.Thumbnails.Medium.URL}
+							contentTile.Portriat = []string{item.Snippet.Thumbnails.Medium.URL}
 							contentTile.IsDetailPage = false
 							contentTile.Type = pb.TileType_ImageTile
 
@@ -600,7 +600,7 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							var contentTile pb.Content
 							contentTile.Title = item.Snippet.Title
 							contentTile.Poster = []string{item.Snippet.Thumbnails.Medium.URL}
-							contentTile.Portrait = []string{item.Snippet.Thumbnails.Medium.URL}
+							contentTile.Portriat = []string{item.Snippet.Thumbnails.Medium.URL}
 							contentTile.IsDetailPage = false
 							contentTile.Type = pb.TileType_ImageTile
 

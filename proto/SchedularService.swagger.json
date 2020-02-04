@@ -64,6 +64,33 @@
         ]
       }
     },
+    "/schedule/getDropDown": {
+      "post": {
+        "summary": "get dropdownList",
+        "operationId": "GetDropDown",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/SchedularServiceDropDownResp"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SchedularServiceDropDownReq"
+            }
+          }
+        ],
+        "tags": [
+          "SchedularService"
+        ]
+      }
+    },
     "/schedule/getSchedule": {
       "post": {
         "operationId": "GetSchedule",
@@ -170,6 +197,25 @@
         "isSuccessful": {
           "type": "boolean",
           "format": "boolean"
+        }
+      }
+    },
+    "SchedularServiceDropDownReq": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        }
+      }
+    },
+    "SchedularServiceDropDownResp": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
