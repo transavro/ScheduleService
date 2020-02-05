@@ -54,14 +54,6 @@ service SchedularService{
     }
 }
 
-message DropDownReq{
-    string key = 1;
-}
-
-message DropDownResp{
-    repeated string result = 1;
-}
-
 message Schedule{
     string brand = 1;
     string vendor = 2;
@@ -117,6 +109,22 @@ enum RowLayout{
     Circle = 3;
 }
 
+enum Monetize {
+    Free = 0;
+    Paid = 1;
+    Subscription = 2;
+    Rent = 3;
+}
+
+
+enum TileType {
+    ImageTile = 0;
+    VideoTile = 1;
+    FeatureTile = 2;
+    AdvertiseTile = 3;
+    CarouselTile = 4;
+}
+
 message RowFilterValue {
     repeated string values = 1;
 }
@@ -163,34 +171,12 @@ message Row{
 }
 
 
-// contentTile
-enum TileType {
-    ImageTile = 0;
-    VideoTile = 1;
-    FeatureTile = 2;
-    AdvertiseTile = 3;
-    CarouselTile = 4;
-}
-
-message ContentTile{
-    string title = 1;
-    string mediaUrl = 2;
-    TileType tileType = 3;
-    string poster = 4;
-    string portrait = 5;
-    bool isDetailPage = 6;
-    string packageName = 7;
-    string contentId = 8;
-    repeated string target = 9;
-    string realeaseDate = 10;
-}
 
 //carosuel
 message CarouselResponse{
     repeated Carousel carousel = 1;
     string carouselBaseUrl = 2;
 }
-
 
 message Carousel{
     string imageUrl = 1;
@@ -229,7 +215,7 @@ message Content {
 }
 
 message Play {
-    int32 monetize = 5;
+    Monetize monetize = 5;
     string target = 1;
     string source = 2;
     string package = 3;
@@ -238,7 +224,13 @@ message Play {
 
 
 
+message DropDownReq{
+    string key = 1;
+}
 
+message DropDownResp{
+    repeated string result = 1;
+}
 
 
 
