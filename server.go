@@ -5,6 +5,7 @@ import (
 	codecs "github.com/amsokol/mongo-go-driver-protobuf"
 	"github.com/go-redis/redis"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/joho/godotenv"
 	pbAuth "github.com/transavro/AuthService/proto"
 	"github.com/transavro/ScheduleService/apihandler"
 	pb "github.com/transavro/ScheduleService/proto"
@@ -20,37 +21,35 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
 
-
-const (
-	//atlasMongoHost          = "mongodb://nayan:tlwn722n@cluster0-shard-00-00-8aov2.mongodb.net:27017,cluster0-shard-00-01-8aov2.mongodb.net:27017,cluster0-shard-00-02-8aov2.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true&w=majority"
-	//developmentMongoHost = "mongodb://dev-uni.cloudwalker.tv:6592"
-	developmentMongoHost = "mongodb://192.168.1.9:27017"
-	schedularMongoHost   = "mongodb://192.168.1.143:27017"
-	schedularRedisHost   = ":6379"
-	grpc_port        = ":7775"
-	rest_port		 = ":7776"
-)
-
-// private type for Context keys
-type contextKey int
-
-const (
-	clientIDKey contextKey = iota
-)
-
 var scheduleCollection, tileCollection *mongo.Collection
 var tileRedis *redis.Client
+var mongoDbHost, redisPort, grpcPort, restPort  string
+
+
 
 // Multiple init() function
 func init() {
 	fmt.Println("Welcome to init() function")
-	scheduleCollection = getMongoCollection("cloudwalker", "schedule", developmentMongoHost)
-	tileCollection = getMongoCollection("optimus", "contents", developmentMongoHost)
-	tileRedis = getRedisClient(schedularRedisHost)
+	err := godotenv.Load()
+	if err != nil {
+		log.Println(err.Error())
+	}
+	loadEnv()
+	scheduleCollection = getMongoCollection("cloudwalker", "schedule", mongoDbHost)
+	tileCollection = getMongoCollection("optimus", "contents", mongoDbHost)
+	tileRedis = getRedisClient(redisPort)
+}
+
+func loadEnv(){
+	mongoDbHost = os.Getenv("MONGO_HOST")
+	redisPort = os.Getenv("REDIS_PORT")
+	grpcPort = os.Getenv("GRPC_PORT")
+	restPort = os.Getenv("REST_PORT")
 }
 
 func unaryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -126,7 +125,7 @@ func startGRPCServer(address string) error {
 	c := cron.New()
 
 	c.AddFunc("00 24-3,3-6,6-9,9-12,12-15,15-18,18-21,21-24 * * *", func() {
-		fmt.Println("cron job hit.")
+		fmt.Println("cron job hit. ", time.Now())
 		runCronJob(&s)
 	})
 
@@ -203,7 +202,7 @@ func getRedisClient(redisHost string) *redis.Client {
 func main() {
 	// fire the gRPC server in a goroutine
 	go func() {
-		err := startGRPCServer(grpc_port)
+		err := startGRPCServer(grpcPort)
 		if err != nil {
 			log.Fatalf("failed to start gRPC server: %s", err)
 		}
@@ -211,7 +210,7 @@ func main() {
 
 	// fire the REST server in a goroutine
 	go func() {
-		err := startRESTServer(rest_port, grpc_port)
+		err := startRESTServer(restPort, grpcPort)
 		if err != nil {
 			log.Fatalf("failed to start gRPC server: %s", err)
 		}
