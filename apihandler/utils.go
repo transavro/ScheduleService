@@ -200,6 +200,7 @@ type YTSearch struct {
 	} `json:"items"`
 }
 
+
 var youtubeApiKeys = [...]string{"AIzaSyCKUyMUlRTHMG9LFSXPYEDQYn7BCfjFQyI", "AIzaSyCNGkNspHPreQQPdT-q8KfQznq4S2YqjgU", "AIzaSyABJehNy0EEzzKl-I7hXkvYeRwIupl2RYA"}
 
 
@@ -213,8 +214,6 @@ func ifExitDelete(redisKey string, redisConn *redis.Client )  {
 		redisConn.Del(redisKey)
 	}
 }
-
-
 
 func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection, redisClient *redis.Client, contentkey string) error {
 
@@ -262,6 +261,7 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 		break
 	case pb.RowType_Editorial:
 		{
+			log.Println("in  editorial ")
 			pipeLine := pipelineBuilder(scheduleRow)
 			cur, err := contentCollection.Aggregate(context.Background(), pipeLine)
 			if err != nil {
@@ -284,6 +284,7 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 								Score:  float64(i),
 								Member: contentByte,
 							}).Err(); err != nil {
+								log.Println("error 4 ")
 								return status.Errorf(codes.Internal, fmt.Sprintf("Error while caching data: ===>  %s ", err))
 							}
 							break
@@ -303,7 +304,6 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 			}
 
 			for cur.Next(context.Background()) {
-				log.Println(cur.Current.String())
 				var content pb.Content
 				err = cur.Decode(&content)
 				if err != nil {
@@ -326,13 +326,16 @@ func rowBuilder(scheduleRow *pb.ScheduleRow, contentCollection *mongo.Collection
 
 func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 
+
+	log.Println(scheduleRow.GetRowTileIds())
+
 	var pipeline mongo.Pipeline
 	if scheduleRow.GetRowType() == pb.RowType_Editorial {
 		//stage 1 finding the ref_id from the given array
-		pipeline = append(pipeline, bson.D{{"$match", bson.D{{"ref_id", bson.D{{"$in", scheduleRow.GetRowTileIds()}}}}}})
+		pipeline = append(pipeline, bson.D{{"$match", bson.D{{"refid", bson.D{{"$in", scheduleRow.GetRowTileIds()}}}}}})
 
 		//stage2 communicating with diff collection
-		stage2 := bson.D{{"$lookup", bson.M{"from": "monetizes", "localField": "ref_id", "foreignField": "ref_id", "as": "play"}}}
+		stage2 := bson.D{{"$lookup", bson.M{"from": "optimus_monetize", "localField": "refid", "foreignField": "refid", "as": "play"}}}
 
 		pipeline = append(pipeline, stage2)
 
@@ -346,10 +349,10 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 			{"title", "$metadata.title"},
 			{"poster", "$media.landscape"},
 			{"portriat", "$media.portrait"},
-			{"type", "$tileType"},
-			{"isDetailPage", "$content.detailPage"},
-			{"contentId", "$ref_id"},
-			{"play", "$play.contentAvailable"},
+			{"type", "$tiletype"},
+			{"isDetailPage", "$content.detailpage"},
+			{"contentId", "$refid"},
+			{"play", "$play.contentavailable"},
 			{"video", "$media.video"},
 		}}}
 		pipeline = append(pipeline, stage4)
@@ -357,7 +360,7 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 	} else if scheduleRow.GetRowType() == pb.RowType_Dynamic {
 
 		//stage1 communicating with diff collection
-		stage1 := bson.D{{"$lookup", bson.M{"from": "monetizes", "localField": "ref_id", "foreignField": "ref_id", "as": "play"}}}
+		stage1 := bson.D{{"$lookup", bson.M{"from": "optimus_monetize", "localField": "refid", "foreignField": "refid", "as": "play"}}}
 
 		pipeline = append(pipeline, stage1)
 
@@ -378,24 +381,24 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 
 		//stage4 groupby stage
 		stage4 := bson.D{{"$group", bson.D{{"_id", bson.D{
-			{"created_at", "$created_at"},
-			{"updated_at", "$updated_at"},
-			{"contentId", "$ref_id"},
-			{"releaseDate", "$metadata.releaseDate"},
+			{"created_at", "$createdat"},
+			{"updated_at", "$updatedat"},
+			{"contentId", "$refid"},
+			{"releaseDate", "$metadata.releasedate"},
 			{"year", "$metadata.year"},
-			{"imdbId", "$metadata.imdbId"},
+			{"imdbId", "$metadata.imdbid"},
 			{"rating", "$metadata.rating"},
-			{"viewCount", "$metadata.viewCount"},
+			{"viewCount", "$metadata.viewcount"},
 
 		}}, {"contentTile", bson.D{{"$push", bson.D{
 			{"title", "$metadata.title"},
 			{"portrait", "$media.portrait",},
 			{"poster", "$media.landscape"},
 			{"video", "$media.video"},
-			{"contentId", "$ref_id"},
-			{"isDetailPage", "$content.detailPage"},
-			{"type", "$tileType"},
-			{"play", "$play.contentAvailable"},
+			{"contentId", "$refid"},
+			{"isDetailPage", "$content.detailpage"},
+			{"type", "$tiletype"},
+			{"play", "$play.contentavailable"},
 		}}}}}}}
 
 		pipeline = append(pipeline, stage4)
@@ -438,7 +441,6 @@ func pipelineBuilder(scheduleRow *pb.ScheduleRow) mongo.Pipeline {
 	}
 	return pipeline
 }
-
 
 func getThirdPartyData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, string, error) {
 	if filterMap["source"].Values[0] == "youtube" {
@@ -502,6 +504,8 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							play.Package = "com.google.android.youtube"
 							if item.Snippet.ResourceID.Kind == "youtube#video" {
 								play.Target = item.Snippet.ResourceID.VideoID
+								play.Source = "Youtube"
+								play.Type = "CWYT_VIDEO"
 								contentTile.Play = []*pb.Play{play}
 								primeResult = append(primeResult, &contentTile)
 							}
@@ -556,6 +560,8 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							play.Package = "com.google.android.youtube"
 							if item.ID.Kind == "youtube#video" {
 								play.Target = item.ID.VideoID
+								play.Source = "Youtube"
+								play.Type = "CWYT_VIDEO"
 								contentTile.Play = []*pb.Play{play}
 								primeResult = append(primeResult, &contentTile)
 							}
@@ -604,10 +610,13 @@ func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.Content, s
 							contentTile.IsDetailPage = false
 							contentTile.Type = pb.TileType_ImageTile
 
+
 							var play pb.Play
 							play.Package = "com.google.android.youtube"
 							if item.ID.Kind == "youtube#video" {
 								play.Target = item.ID.VideoID
+								play.Source = "Youtube"
+								play.Type = "CWYT_VIDEO"
 								contentTile.Play = []*pb.Play{&play}
 								primeResult = append(primeResult, &contentTile)
 							}

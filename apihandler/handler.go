@@ -22,7 +22,6 @@ type Server struct {
 }
 
 func (s *Server) CreateSchedule(ctx context.Context, req *pb.Schedule) (*pb.Schedule, error) {
-
 	//making fulter query
 	//filter := bson.M{"$and": []bson.M{{"brand": req.GetBrand()}, {"vendor": req.GetVendor()}, {"starttime": req.GetStartTime()}, {"endtime": req.GetEndTime()}}}
 

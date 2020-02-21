@@ -41,7 +41,7 @@ func init() {
 	}
 	loadEnv()
 	scheduleCollection = getMongoCollection("cloudwalker", "schedule", mongoDbHost)
-	tileCollection = getMongoCollection("optimus", "contents", mongoDbHost)
+	tileCollection = getMongoCollection("transavro", "optimus_content", mongoDbHost)
 	tileRedis = getRedisClient(redisPort)
 }
 
@@ -113,10 +113,11 @@ func startGRPCServer(address string) error {
 		tileCollection,
 	}
 
-	serverOptions := []grpc.ServerOption{grpc.UnaryInterceptor(unaryInterceptor), grpc.StreamInterceptor(streamIntercept)}
+	//serverOptions := []grpc.ServerOption{grpc.UnaryInterceptor(unaryInterceptor), grpc.StreamInterceptor(streamIntercept)}
 
 	//attach the Ping service to the server
-	grpcServer := grpc.NewServer(serverOptions...)
+	//grpcServer := grpc.NewServer(serverOptions...)
+	grpcServer := grpc.NewServer()
 
 
 	// attach the Ping service to the server
