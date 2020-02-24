@@ -1,12 +1,54 @@
 package apihandler
 
 import (
-	pb "github.com/transavro/ScheduleService/proto"
+	"fmt"
 	"github.com/go-redis/redis"
+	pb "github.com/transavro/ScheduleService/proto"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"strings"
 )
+
+
+//keys present
+var dbKeys = []string{
+	"content.publishState",
+	"content.detailPage",
+	"content.package",
+	"content.target",
+	"content.source",
+	"content.startIndex",
+	"content.startTime",
+	"metadata.country",
+	"metadata.relatedText",
+	"metadata.relatedTags",
+	"metadata.customTags",
+	"metadata.metascore",
+	"metadata.imdbid",
+	"metadata.runtime",
+	"metadata.rating",
+	"metadata.awards",
+	"metadata.votes",
+	"metadata.releaseDate",
+	"metadata.writers",
+	"metadata.tags",
+	"metadata.year",
+	"metadata.cast",
+	"metadata.directors",
+	"metadata.genre",
+	"metadata.categories",
+	"metadata.languages",
+	"metadata.kidssafe",
+	"metadata.viewCount",
+	"metadata.season",
+	"metadata.episode",
+	"metadata.part",
+	"updated_at",
+	"created_at",
+}
 
 
 // helper structs
@@ -130,3 +172,181 @@ func ifExitDelete(redisKey string, redisConn *redis.Client )  {
 		redisConn.Del(redisKey)
 	}
 }
+
+func (s *Server) ValidatingData(scheudle *pb.Schedule, ctx context.Context) error {
+
+	var tempPageIndex []int32
+	// validating vendor and brand
+	if len(scheudle.GetBrand()) == 0 {
+		return status.Error(codes.InvalidArgument, "Brand name cannot be empty or nil")
+	} else if len(scheudle.GetVendor()) == 0 {
+		return status.Error(codes.InvalidArgument, "Vendor name cannot be empty or nil")
+	}else if scheudle.GetStartTime() == 0 {
+		return status.Error(codes.InvalidArgument, "Start Time not specified")
+	}else if scheudle.GetEndTime() == 0 {
+		return status.Error(codes.InvalidArgument, "End Time not specified")
+	}
+
+	for _, page := range scheudle.Pages {
+
+		var tempRowIndex []int32
+
+
+		// validating pages in data
+		if len(page.GetPageName()) == 0 {
+			return status.Error(codes.InvalidArgument, "Page Name cannot be empty or nil")
+		}
+
+		// validating carousel
+		for _, carousel := range page.Carousel {
+			if len(carousel.GetTitle()) == 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s title for carosuel cannot be nil or empty for page %s ", page.GetPageName()))
+			} else if len(carousel.GetPackageName()) == 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s package name cannot be nil or empty for page %s ", page.GetPageName()))
+			}else if !strings.Contains(carousel.GetPackageName(), "."){
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s package name is invalid or empty for page %s ", page.GetPageName()))
+			} else if len(carousel.GetImageUrl()) == 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s image url cannot be nil or empty for %s ", page.GetPageName()))
+			} else if len(carousel.GetTarget()) == 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%s target cannot be nil or empty for %s ", page.GetPageName()))
+			}
+		}
+
+		// cheking if the pageIndex is non negative and non repeatative
+		if page.GetPageIndex() < 0 {
+			return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%d negative Page Index is Invalid for Page name %s ", page.GetPageIndex(), page.GetPageIndex()))
+		}
+
+		for _, index := range tempPageIndex {
+			if index == page.GetPageIndex() {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%d Page Index already present to another Page.", page.GetPageIndex()))
+			}
+		}
+		tempPageIndex = append(tempPageIndex, page.GetPageIndex())
+
+		for _, row := range page.Row {
+			//check if row Name id empty or nil
+			if len(row.GetRowName()) == 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("Row Name cannot be empty or nil at page = %s ", page.GetPageName()) )
+			}
+
+			// checking filter keys
+			for rowFilterKey, _ := range row.RowFilters {
+				keyFound := false
+				for _, key := range dbKeys {
+					if rowFilterKey == key {
+						keyFound = true
+						break
+					}
+				}
+				if keyFound == false {
+					return status.Errorf(codes.NotFound, fmt.Sprintf("%s filter key not found at row = %s  , page = %s ", rowFilterKey, row.GetRowName(), page.GetPageName()))
+				}
+			}
+
+			// check sort keys
+			for sortKey, _ := range row.RowSort {
+				keyFound := false
+				for _, key := range dbKeys {
+					if sortKey == key {
+						keyFound = true
+						break
+					}
+				}
+				if keyFound == false {
+					return status.Errorf(codes.NotFound, fmt.Sprintf("%s sort key not found at row = %s  , page = %s ", sortKey, row.GetRowName(), page.GetPageName()))
+				}
+			}
+
+			// checking if tileId present while using Editorial Rows
+			if row.GetRowType() == pb.RowType_Editorial {
+				if len(row.GetRowTileIds()) == 0 {
+					return status.Errorf(codes.NotFound, fmt.Sprintf("Row type is Editorial but tile ids set is not provided in row  = %s and page = %s ", row.GetRowName(), page.GetPageName()))
+				}
+				for idIndex , tileId := range row.RowTileIds {
+					findResult := s.TileCollection.FindOne(ctx, bson.D{{"refid", tileId}})
+					if findResult.Err() != nil {
+						if findResult.Err() == mongo.ErrNoDocuments {
+							return status.Errorf(codes.NotFound, fmt.Sprintf("%s tile Id Not found in the DB in row name = %s at index %d at page = %s ", tileId, row.GetRowName(), idIndex, page.GetPageName()))
+						} else {
+							return findResult.Err()
+						}
+					}
+				}
+			}
+
+
+
+
+			// checking if the rowIndex is non repetative and non negative
+			if row.GetRowIndex() < 0 {
+				return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%d negative row Index is Invalid for row name %s at page = %s ", row.GetRowIndex(), row.GetRowName(), page.GetPageName()))
+			}
+
+			for _, index := range tempRowIndex {
+				if index == row.GetRowIndex() {
+					return status.Errorf(codes.InvalidArgument, fmt.Sprintf("%d row Index already present to another row in page name = %s ", row.GetRowIndex(), page.GetPageName()))
+				}
+			}
+			tempRowIndex = append(tempRowIndex, row.GetRowIndex())
+		}
+	}
+	return nil
+}
+
+func (s *Server) RemovingSpaces(schedule *pb.Schedule) {
+
+	//trimming brand and vendor
+	schedule.Vendor = strings.TrimSpace(schedule.GetVendor())
+	schedule.Brand = strings.TrimSpace(schedule.GetBrand())
+
+	for _, page := range schedule.GetPages() {
+
+		//triming page info
+		page.PageName = strings.TrimSpace(page.GetPageName())
+
+		// carousel looping
+		for _, carousel := range page.Carousel {
+			carousel.Title = strings.TrimSpace(carousel.GetTitle())
+			carousel.Target = strings.Trim(carousel.Target, " ")
+			carousel.PackageName = strings.Trim(carousel.PackageName, " ")
+			carousel.ImageUrl = strings.Trim(carousel.ImageUrl, " ")
+		}
+
+		// rows looping
+		for _, row := range page.Row {
+			//Row name Trimming
+			row.RowName = strings.TrimSpace(row.GetRowName())
+
+			// titleIds
+			if row.GetRowTileIds() != nil {
+				var tempTileId []string
+				for _, tileid := range row.GetRowTileIds() {
+					tempTileId = append(tempTileId, strings.Trim(tileid, " "))
+				}
+				row.RowTileIds = tempTileId
+			}
+
+			// row Sort trimming
+			if row.RowSort != nil && len(row.RowSort) > 0 {
+				tempSortMap := make(map[string]int32, len(row.RowSort))
+				for rowSortKey, rowSortValue := range row.RowSort {
+					tempSortMap[strings.Trim(rowSortKey, " ")] = rowSortValue
+				}
+				row.RowSort = tempSortMap
+			}
+
+			//rowFilter trimming
+			if row.RowFilters != nil && len(row.RowFilters) > 0 {
+				tempFilterMap := make(map[string]*pb.RowFilterValue, len(row.RowFilters))
+				for rowFilterKey, rowFilterValue := range row.RowFilters {
+					tempFilterMap[strings.Trim(rowFilterKey, " ")] = rowFilterValue
+				}
+				row.RowFilters = tempFilterMap
+			}
+		}
+	}
+}
+
+
+

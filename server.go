@@ -27,8 +27,8 @@ import (
 
 const (
 	//atlasMongoHost          = "mongodb://nayan:tlwn722n@cluster0-shard-00-00-8aov2.mongodb.net:27017,cluster0-shard-00-01-8aov2.mongodb.net:27017,cluster0-shard-00-02-8aov2.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true&w=majority"
-	developmentMongoHost = "mongodb://dev-uni.cloudwalker.tv:6592"
 	schedularMongoHost   = "mongodb://192.168.1.143:27017"
+	developmentMongoHost   = "mongodb://192.168.1.9:27017"
 	schedularRedisHost   = ":6379"
 	grpc_port        = ":7775"
 	rest_port		 = ":7776"
@@ -182,7 +182,9 @@ func startRESTServer(address, grpcAddress string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(credMatcher),)
+
+
+	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(runtime.DefaultHeaderMatcher), runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName:false, EnumsAsInts:true, EmitDefaults:true}) )
 
 	opts := []grpc.DialOption{grpc.WithInsecure()} // Register ping
 
