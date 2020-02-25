@@ -330,15 +330,16 @@ func (s *Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) er
 				}
 			}
 
+			log.Println("ROW INDEX   ", rowValues.GetRowIndex(), "   ROWNAME    ",rowValues.GetRowName())
+
 			helperRow := pb.Row{
 				RowName:        rowValues.GetRowName(),
 				RowLayout:      rowValues.GetRowlayout(),
 				ContentBaseUrl: "http://cloudwalker-assets-prod.s3.ap-south-1.amazonaws.com/images/tiles/",
 				ContentId:      contentkey,
 				Shuffle:        rowValues.GetShuffle(),
+				RowIndex: 		rowValues.GetRowIndex(),
 			}
-
-
 
 			resultByteArray, err := proto.Marshal(&helperRow)
 			if err != nil {
@@ -364,6 +365,7 @@ func (s *Server) RefreshingWorker(schedule *pb.Schedule, ctx context.Context) er
 			PageEndpoint: fmt.Sprintf("/page/%s/%s/%s", formatString(schedule.Vendor),
 				formatString(schedule.Brand),
 				formatString(pageValue.PageName)),
+			PageIndex: pageValue.GetPageIndex(),
 		}
 		resultByteArray, err = proto.Marshal(&primePageObj)
 		if err != nil {

@@ -142,6 +142,7 @@ message Row{
     string contentBaseUrl = 3;
     string contentId = 4;
     bool shuffle = 5;
+    int32 rowIndex = 6;
 }
 
 
@@ -190,6 +191,7 @@ message CloudwalkerSchedule{
 message PrimePage{
     string pageName = 1;
     string pageEndpoint = 2;
+    int32 pageIndex = 3 ;
 }
 
 message Page{
