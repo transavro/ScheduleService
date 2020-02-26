@@ -46,7 +46,7 @@ var tileRedis *redis.Client
 // Multiple init() function
 func init() {
 	fmt.Println("Welcome to init() function")
-	scheduleCollection = getMongoCollection("cloudwalker", "schedule", atlasMongoHost)
+	scheduleCollection = getMongoCollection("cloudwalker", "test_schedule", developmentMongoHost)
 	tileCollection = getMongoCollection("cwtx2devel", "tiles", developmentMongoHost)
 	tileRedis = getRedisClient(schedularRedisHost)
 }
@@ -181,10 +181,7 @@ func startRESTServer(address, grpcAddress string) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-
 	mux := runtime.NewServeMux(runtime.WithIncomingHeaderMatcher(runtime.DefaultHeaderMatcher), runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{OrigName:false, EnumsAsInts:true, EmitDefaults:true}) )
-
 	opts := []grpc.DialOption{grpc.WithInsecure()} // Register ping
 
 	err := pb.RegisterSchedularServiceHandlerFromEndpoint(ctx, mux, grpcAddress, opts)
@@ -198,7 +195,6 @@ func startRESTServer(address, grpcAddress string) error {
 }
 
 func getMongoCollection(dbName, collectionName, mongoHost string) *mongo.Collection {
-	// Register custom codecs for protobuf Timestamp and wrapper types
 	reg := codecs.Register(bson.NewRegistryBuilder()).Build()
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoHost), options.Client().SetRegistry(reg))
@@ -223,9 +219,6 @@ func getRedisClient(redisHost string) *redis.Client {
 
 func main() {
 
-	//grpcAddress := fmt.Sprintf("%s:%d", "cloudwalker.services.tv", 7775)
-	//restAddress := fmt.Sprintf("%s:%d", "cloudwalker.services.tv", 7776)
-
 	// fire the gRPC server in a goroutine
 	go func() {
 		err := startGRPCServer(grpc_port)
@@ -242,7 +235,26 @@ func main() {
 		}
 	}()
 
-	// infinite loop
-	//log.Printf("Entering infinite loop")
 	select {}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -192,6 +192,14 @@
         },
         "brand": {
           "type": "string"
+        },
+        "startTime": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "endTime": {
+          "type": "integer",
+          "format": "int32"
         }
       },
       "title": "Refresh logic"
@@ -231,7 +239,8 @@
       "enum": [
         "Editorial",
         "Recommendation",
-        "Dynamic"
+        "Dynamic",
+        "Web"
       ],
       "default": "Editorial"
     },

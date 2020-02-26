@@ -90,6 +90,7 @@ enum RowType{
     Editorial = 0;
     Recommendation  = 1 ;
     Dynamic  = 2;
+    Web = 3;
 }
 
 enum RowLayout{
@@ -126,6 +127,8 @@ message DeleteScheduleResponse {
 message RefreshScheduleRequest {
     string vendor = 1;
     string brand = 2;
+    int32 startTime = 3;
+    int32 endTime = 4;
 }
 
 

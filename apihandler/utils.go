@@ -1,6 +1,7 @@
 package apihandler
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-redis/redis"
 	pb "github.com/transavro/ScheduleService/proto"
@@ -9,7 +10,11 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"log"
+	"math/rand"
+	"net/http"
 	"strings"
+	"time"
 )
 
 
@@ -90,6 +95,147 @@ type Temp struct {
 		Updated_at       string `json:"updated_at"`
 	} `json:"contentTile"`
 }
+
+type YtPlayist struct {
+	Kind          string `json:"kind"`
+	Etag          string `json:"etag"`
+	NextPageToken string `json:"nextPageToken"`
+	PageInfo      struct {
+		TotalResults   int `json:"totalResults"`
+		ResultsPerPage int `json:"resultsPerPage"`
+	} `json:"pageInfo"`
+	Items []struct {
+		Kind    string `json:"kind"`
+		Etag    string `json:"etag"`
+		ID      string `json:"id"`
+		Snippet struct {
+			PublishedAt time.Time `json:"publishedAt"`
+			ChannelID   string    `json:"channelId"`
+			Title       string    `json:"title"`
+			Description string    `json:"description"`
+			Thumbnails  struct {
+				Default struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"default"`
+				Medium struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"medium"`
+				High struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"high"`
+				Standard struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"standard"`
+				Maxres struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"maxres"`
+			} `json:"thumbnails"`
+			ChannelTitle string `json:"channelTitle"`
+			PlaylistID   string `json:"playlistId"`
+			Position     int    `json:"position"`
+			ResourceID   struct {
+				Kind    string `json:"kind"`
+				VideoID string `json:"videoId"`
+			} `json:"resourceId"`
+		} `json:"snippet"`
+		ContentDetails struct {
+			VideoID          string    `json:"videoId"`
+			VideoPublishedAt time.Time `json:"videoPublishedAt"`
+		} `json:"contentDetails"`
+	} `json:"items"`
+}
+
+// youtube channhels
+type YTChannel struct {
+	Kind          string `json:"kind"`
+	Etag          string `json:"etag"`
+	NextPageToken string `json:"nextPageToken"`
+	RegionCode    string `json:"regionCode"`
+	PageInfo      struct {
+		TotalResults   int `json:"totalResults"`
+		ResultsPerPage int `json:"resultsPerPage"`
+	} `json:"pageInfo"`
+	Items []struct {
+		Kind string `json:"kind"`
+		Etag string `json:"etag"`
+		ID   struct {
+			Kind    string `json:"kind"`
+			VideoID string `json:"videoId"`
+		} `json:"id"`
+		Snippet struct {
+			PublishedAt time.Time `json:"publishedAt"`
+			ChannelID   string    `json:"channelId"`
+			Title       string    `json:"title"`
+			Description string    `json:"description"`
+			Thumbnails  struct {
+				Default struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"default"`
+				Medium struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"medium"`
+				High struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"high"`
+			} `json:"thumbnails"`
+			ChannelTitle         string `json:"channelTitle"`
+			LiveBroadcastContent string `json:"liveBroadcastContent"`
+		} `json:"snippet"`
+	} `json:"items"`
+}
+
+// youtube search
+type YTSearch struct {
+	Kind          string `json:"kind"`
+	NextPageToken string `json:"nextPageToken"`
+	Items         []struct {
+		Kind string `json:"kind"`
+		ID   struct {
+			Kind    string `json:"kind"`
+			VideoID string `json:"videoId"`
+		} `json:"id"`
+		Snippet struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Thumbnails  struct {
+				Default struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"default"`
+				Medium struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"medium"`
+				High struct {
+					URL    string `json:"url"`
+					Width  int    `json:"width"`
+					Height int    `json:"height"`
+				} `json:"high"`
+			} `json:"thumbnails"`
+		} `json:"snippet"`
+	} `json:"items"`
+}
+
+
+var youtubeApiKeys = [...]string{"AIzaSyCNGkNspHPreQQPdT-q8KfQznq4S2YqjgU", "AIzaSyABJehNy0EEzzKl-I7hXkvYeRwIupl2RYA", "AIzaSyCKUyMUlRTHMG9LFSXPYEDQYn7BCfjFQyI", }
 
 
 // helper function
@@ -174,7 +320,6 @@ func ifExitDelete(redisKey string, redisConn *redis.Client )  {
 }
 
 func (s *Server) ValidatingData(scheudle *pb.Schedule, ctx context.Context) error {
-
 	var tempPageIndex []int32
 	// validating vendor and brand
 	if len(scheudle.GetBrand()) == 0 {
@@ -346,6 +491,179 @@ func (s *Server) RemovingSpaces(schedule *pb.Schedule) {
 			}
 		}
 	}
+}
+
+func getThirdPartyData(filterMap map[string]*pb.RowFilterValue) ([]*pb.ContentTile, string, error) {
+	log.Println("Third Party started.... ====>>>>    ", filterMap)
+	if filterMap["source"].Values[0] == "youtube" {
+		return fetchYoutubeData(filterMap)
+	} else {
+		return nil, "", status.Error(codes.NotFound, "Not got any data.")
+	}
+}
+
+func fetchYoutubeData(filterMap map[string]*pb.RowFilterValue) ([]*pb.ContentTile, string, error) {
+
+	var req *http.Request
+	var resp *http.Response
+	var err error
+	rand.Seed(time.Now().UnixNano())
+	currentYTApiKey := youtubeApiKeys[rand.Intn(len(youtubeApiKeys))]
+
+	for key, value := range filterMap {
+		if key == "source" {
+			continue
+		} else {
+			switch strings.ToLower(key) {
+			case "playlist":
+				{
+					req, err = http.NewRequest("GET", "https://www.googleapis.com/youtube/v3/playlistItems", nil)
+					if err != nil {
+						return nil, "", err
+					}
+					q := req.URL.Query()
+					q.Add("key", currentYTApiKey)
+					q.Add("playlistId", value.Values[0])
+					q.Add("part", "snippet,contentDetails")
+					q.Add("maxResults", "50")
+
+					req.URL.RawQuery = q.Encode()
+					client := &http.Client{}
+					resp, err = client.Do(req)
+					if err != nil {
+						return nil, "", err
+					}
+
+					if resp.StatusCode == 200 {
+
+						var playlistResp YtPlayist
+						err = json.NewDecoder(resp.Body).Decode(&playlistResp)
+						if err != nil {
+							return nil, "", err
+						}
+
+						var primeResult []*pb.ContentTile
+
+						for _, item := range playlistResp.Items {
+							var contentTile pb.ContentTile
+							contentTile.Title = item.Snippet.Title
+							contentTile.Poster = item.Snippet.Thumbnails.Medium.URL
+							contentTile.Portrait = item.Snippet.Thumbnails.Medium.URL
+							contentTile.IsDetailPage = false
+							contentTile.TileType = pb.TileType_ImageTile
+							contentTile.PackageName = "com.google.android.youtube"
+							contentTile.RealeaseDate = item.ContentDetails.VideoPublishedAt.String()
+							contentTile.Target = []string{item.Snippet.ResourceID.VideoID}
+							primeResult = append(primeResult, &contentTile)
+
+						}
+						resp.Body.Close()
+						return primeResult, playlistResp.NextPageToken, nil
+					} else {
+						return nil, "", status.Error(codes.NotFound, "Playlist Data not found")
+					}
+				}
+				break
+			case "channel":
+				{
+					req, err = http.NewRequest("GET", "https://www.googleapis.com/youtube/v3/search", nil)
+					if err != nil {
+						return nil, "", err
+					}
+					q := req.URL.Query()
+					q.Add("key", currentYTApiKey)
+					q.Add("channelId", value.Values[0])
+					q.Add("part", "snippet")
+					q.Add("maxResults", "50")
+
+					req.URL.RawQuery = q.Encode()
+					client := &http.Client{}
+					resp, err = client.Do(req)
+					if err != nil {
+						return nil, "", err
+					}
+
+					if resp.StatusCode == 200 {
+
+						var playlistResp YTChannel
+						err = json.NewDecoder(resp.Body).Decode(&playlistResp)
+						if err != nil {
+							log.Println("got error 1ch  ", err.Error())
+							return nil, "", err
+						}
+
+						var primeResult []*pb.ContentTile
+
+						for _, item := range playlistResp.Items {
+							var contentTile pb.ContentTile
+
+							contentTile.Title = item.Snippet.Title
+							contentTile.Poster = item.Snippet.Thumbnails.Medium.URL
+							contentTile.Portrait = item.Snippet.Thumbnails.Medium.URL
+							contentTile.IsDetailPage = false
+							contentTile.TileType = pb.TileType_ImageTile
+							contentTile.PackageName = "com.google.android.youtube"
+							contentTile.Target = []string{item.ID.VideoID}
+							primeResult = append(primeResult, &contentTile)
+						}
+						resp.Body.Close()
+						return primeResult, playlistResp.NextPageToken, nil
+					} else {
+						return nil, "", status.Error(codes.NotFound, "Channel Data not found")
+					}
+				}
+				break
+			case "search":
+				{
+				log.Println("Search started ============>   ", value )
+					req, err = http.NewRequest("GET", "https://www.googleapis.com/youtube/v3/search", nil)
+					if err != nil {
+						return nil, "", err
+					}
+					q := req.URL.Query()
+					q.Add("key", currentYTApiKey)
+					q.Add("maxResults", "50")
+					q.Add("q", value.Values[0])
+					q.Add("part", "snippet")
+
+					req.URL.RawQuery = q.Encode()
+					client := &http.Client{}
+					resp, err = client.Do(req)
+					if err != nil {
+						return nil, "", err
+					}
+
+					if resp.StatusCode == 200 {
+						var searchResp YTSearch
+						err = json.NewDecoder(resp.Body).Decode(&searchResp)
+						if err != nil {
+							log.Println("got error 1ch  ", err.Error())
+							return nil, "", err
+						}
+						var primeResult []*pb.ContentTile
+						for _, item := range searchResp.Items {
+							var contentTile pb.ContentTile
+							contentTile.Title = item.Snippet.Title
+							contentTile.Poster = item.Snippet.Thumbnails.Medium.URL
+							contentTile.Portrait = item.Snippet.Thumbnails.Medium.URL
+							contentTile.IsDetailPage = false
+							contentTile.TileType = pb.TileType_ImageTile
+							contentTile.PackageName = "com.google.android.youtube"
+							contentTile.Target = []string{item.ID.VideoID}
+							primeResult = append(primeResult, &contentTile)
+						}
+						resp.Body.Close()
+						return primeResult, searchResp.NextPageToken, nil
+
+					} else {
+						return nil, "", status.Error(codes.NotFound, "Search Data not found")
+					}
+				}
+				break
+			}
+		}
+	}
+	return nil, "", status.Error(codes.NotFound, "Row Filter map is Empty")
 }
 
 
